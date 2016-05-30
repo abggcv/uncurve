@@ -241,7 +241,7 @@ void showReducedImage(string title, Mat img)
 
 
 
-void detectCircle(Mat img)
+bool detectCircle(Mat img)
 {
 	//apply padding border around image
 	Mat image = Mat::zeros((int)(1.6*img.rows), (int)(1.6*img.cols), CV_8UC3);
@@ -275,7 +275,7 @@ void detectCircle(Mat img)
 	//draw contours
 	Mat cntimg = Mat::zeros(image.rows, image.cols, CV_8UC3);
 
-	int ind = 0;
+	int ind = -1;
 
 	for(int i = 0; i < contours.size(); i++)
 	{
@@ -290,6 +290,12 @@ void detectCircle(Mat img)
 		drawContours(cntimg, contours, i, Scalar(255, 255, 0));		
 		
 		ind = i;
+	}
+
+	if(ind < 0)
+	{
+		cout << "no circle found ... quitting!" << endl;
+		return false;
 	}
 
 	//vector<Point> approxcnt;
@@ -332,6 +338,8 @@ void detectCircle(Mat img)
 	showReducedImage("circle", cntimg);
 	waitKey(0);
 
+	return true;
+
 }
 
 
@@ -348,9 +356,6 @@ int main( int argc, char** argv)
 
 	Mat imgCpy;
 	img.copyTo(imgCpy);
-
-	Mat img2;
-	img.copyTo(img2);
 
 	//threshold by red color
 	
@@ -384,7 +389,7 @@ int main( int argc, char** argv)
 
 	cout << "found contours .. " << endl;
 
-	//draw contours
+	//find biggest contour
 	Mat cntimg = Mat::zeros(img.rows, img.cols, CV_8UC1);
 	
 	double maxArea = 0;
@@ -445,15 +450,28 @@ int main( int argc, char** argv)
 		putText(img, txt, approxcnt[i], CV_FONT_HERSHEY_COMPLEX_SMALL, 1, Scalar(0, 255 , 255));
 	}
 
-	//bouding box	
+	//bounding box	
 	Rect boundRect = boundingRect(contours[indMaxArea]);
+
+	//******************\\
+
+	//apply circle detection and prespective correction
+	Mat img2;
+	img(boundRect).copyTo(img2);
+	detectCircle(img2);
+
+
+	//*******************\\
+
+
 
 	Rect bb2 = Rect(boundRect.x-20, boundRect.y-20, boundRect.width+60, boundRect.height+60); //extend bounding box to cover more area like 20 pixels on all sides
 
 	// rotated rectangle
 	RotatedRect rotBoundRect = minAreaRect(contours[indMaxArea]);		
-    Point2f rect_points[4]; rotBoundRect.points( rect_points );
+    Point2f rect_points[4]; rotBoundRect.points( rect_points );   //clock-wise order starting with bottom left corner
 
+	//draw bounding box and rotated rectangle
 	rectangle(img, boundRect, Scalar(255, 0, 0));
 
 	for( int j = 0; j < 4; j++ )
@@ -465,6 +483,8 @@ int main( int argc, char** argv)
 		txt = ss.str();
 		putText(img, txt, rect_points[j], CV_FONT_HERSHEY_COMPLEX_SMALL, 1, Scalar(255, 0 , 255));
 	}
+
+
 	showReducedImage("image", img);
 	//imshow("image", img);
 	waitKey(0);
@@ -474,13 +494,7 @@ int main( int argc, char** argv)
 	Mat bbImg;
 	img(bb2).copyTo(bbImg);
 
-
-	vector<Scalar> colorVec(4);
-	colorVec[0] = Scalar(0, 255, 0);
-	colorVec[1] = Scalar(50, 255, 112); 
-	colorVec[2] = Scalar(120, 255, 20);
-	colorVec[3] = Scalar(10, 150, 0);
-
+	
 	//sort corner points in clockwise order starting from bottom-right point
 	vector<Point2f> sortedCorners(4);
 	vector<int> sortedCornersInd(4);
@@ -514,80 +528,6 @@ int main( int argc, char** argv)
 	}
 
 	
-	Point2f boundRectPoints[4]; 
-
-	boundRectPoints[0] = Point2f((float)(boundRect.x + boundRect.width), (float)(boundRect.y + boundRect.height));
-	boundRectPoints[1] = Point2f((float)boundRect.x, (float)(boundRect.y + boundRect.height));
-	boundRectPoints[2] = Point2f((float)boundRect.x, (float)boundRect.y);
-	boundRectPoints[3] = Point2f((float)(boundRect.x + boundRect.width), (float)boundRect.y);
-
-	//extract each curved side separately
-	vector<vector<Point>> curvedSides(2);
-
-	vector<Point> largestcnt = contours[indMaxArea];
-
-	//bounds for left and right curved sides
-
-	//y - y1 = (y2-y1)*(x-x1)/(x2-x1)
-	//f = y1+m(x-x1)-y
-	
-	double m1, m2;
-	m1 = (sortedCorners[2].y - sortedCorners[1].y)/(sortedCorners[2].x - sortedCorners[1].x);
-	m2 = (sortedCorners[3].y - sortedCorners[0].y)/(sortedCorners[3].x - sortedCorners[0].x);
-
-	cout << "m1: " << m1 << " and m2: " << m2 << endl;
-
-	double f1, f2;
-	f1 = sortedCorners[1].y + m1*(avgCorners.x - sortedCorners[1].x) - avgCorners.y;
-	f2 = sortedCorners[0].y + m2*(avgCorners.x - sortedCorners[0].x) - avgCorners.y;
-
-	cout << "f1: " << f1 << " and f2: " << f2 << endl;
-
-	vector<Point> leftSide, rightSide;
-
-	for(int i = 0; i < largestcnt.size(); i++)
-	{
-		if(checkPoint(largestcnt[i], m1, corners[1], f1))
-			leftSide.push_back(largestcnt[i]);
-
-		else
-			if(checkPoint(largestcnt[i], m2, sortedCorners[0], f2))
-				rightSide.push_back(largestcnt[i]);
-	}
-
-	cout << "size of image: " << img.size() << endl;
-
-	cout << "left side: " << endl;
-	cout << leftSide << endl;
-
-	cout << endl;
-
-	cout << "right side: " << endl;
-	cout << rightSide << endl;
-	cout << endl;
-
-	curvedSides.push_back(leftSide);
-	curvedSides.push_back(rightSide);
-
-	//draw curvedsides
-	for(int j = 0; j < leftSide.size(); j++)			
-		circle(imgCpy, leftSide[j], 3, Scalar(0, 255, 0), -1);
-
-	for(int j = 0; j < rightSide.size(); j++)			
-		circle(imgCpy, rightSide[j], 3, Scalar(255, 0, 0), -1);
-
-	cout << "length of left curved side: " << arcLength(leftSide, false) << endl;
-
-	cout << "verticle height of left curved side: " << abs(sortedCorners[2].y - sortedCorners[1].y) << endl;
-
-	cout << "verticle height of right curved side: " << abs(sortedCorners[3].y - sortedCorners[0].y) << endl;
-
-	cout << "length of right curved side: " << arcLength(rightSide, false) << endl;
-
-	/*for(int i = 0; i < 2; i++)
-		for(int j = 0; j < curvedSides[i].size(); j++)
-			circle(imgCpy, curvedSides[i][j], 3, colorVec[i], -1);
-			*/
 	vector<Point2f> src(4), dst(4);
 
 	//src[0] = boundRectPoints[2]; src[1] = boundRectPoints[3]; src[2] = boundRectPoints[0]; src[3] = boundRectPoints[1]; 
@@ -602,39 +542,17 @@ int main( int argc, char** argv)
 	//dst[0] = Point2f(boundRect.x, boundRect.y); dst[1] = Point2f(boundRect.x + boundRect.width, boundRect.y);
 	//dst[2] = Point2f(boundRect.x + boundRect.width, boundRect.y + boundRect.height);
 
-	int h1 = src[3].y - src[0].y;
-	int h2 = src[2].y - src[1].y;
-
-	cout << "h1: " << h1 << " and h2: " << h2 << endl;
-
-	int h = (h1 > h2)?h1:h2;
-
-	cout << "h: " << h << " and boundRect height: " << boundRect.height << endl;
-
 	dst[0] = Point2f(0, 0);
 	dst[1] = Point2f(boundRect.width, 0);
 	dst[2] = Point2f(boundRect.width, boundRect.height);
 	dst[3] = Point2f(0, boundRect.height);
-	
-	/*for( int j = 0; j < 4; j++ )
-	{
-		String txt;
-		stringstream ss;
-		ss << (j+1);
-		txt = ss.str();
-		putText(img, txt, rect_points[j], CV_FONT_HERSHEY_PLAIN, 2, Scalar(255, 0 ,0)); 
-		line( img, rect_points[j], rect_points[(j+1)%4], Scalar(255, 0, 255), 1, 8 );
-
-		putText(img, txt, boundRectPoints[j], CV_FONT_HERSHEY_PLAIN, 2, Scalar(0, 255 ,0)); 
-
-	}
-	*/
+		
 	Mat ppt = getPerspectiveTransform(src, dst);
 
 	cout << "applying perspective transform" << endl;
 	
 	Mat dstImg;	
-	warpPerspective(imgCpy, dstImg, ppt, Size(boundRect.width, h));
+	warpPerspective(imgCpy, dstImg, ppt, Size(boundRect.width, boundRect.height));
 
 	showReducedImage("transformed1", dstImg);
 	//imshow("transformed1", dstImg);
@@ -647,6 +565,7 @@ int main( int argc, char** argv)
 
 	vector<Point2f> cntMaxArea;
 	
+	//biggest contour after transformation
 	for(int i = 0; i < contours[indMaxArea].size(); i++)
 		cntMaxArea.push_back(Point2f(contours[indMaxArea][i].x, contours[indMaxArea][i].y));
 
@@ -657,9 +576,34 @@ int main( int argc, char** argv)
 
 	//Rect wbb = boundingRect(warpcntMaxAreaMaxArea);
 
-	detectCircle(dstImg.clone());
+	if(!detectCircle(dstImg.clone()))
+		return -1;
 
-	int minX = 10000;
+	return 1;
+}
+
+
+
+
+
+
+
+
+
+/*vector<Scalar> colorVec(4);
+	colorVec[0] = Scalar(0, 255, 0);
+	colorVec[1] = Scalar(50, 255, 112); 
+	colorVec[2] = Scalar(120, 255, 20);
+	colorVec[3] = Scalar(10, 150, 0);
+	*/
+
+
+
+
+
+/**
+
+int minX = 10000;
 	int maxX = 0;
 
 	int indMin = -1;
@@ -755,14 +699,127 @@ int main( int argc, char** argv)
 	//imshow("red", red);
 	//imshow("input copy", imgCpy);
 	//imshow("input", img);
-	showReducedImage("contours", cntimg);
+	//showReducedImage("contours", cntimg);
 	//imshow("contours", cntimg);
 	//imshow("dst", dstImg);
 	//imshow("final", dstImg2);
-	waitKey(0);
+	//waitKey(0);
 
-	return 1;
-}
+
+
+**/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*for( int j = 0; j < 4; j++ )
+	{
+		String txt;
+		stringstream ss;
+		ss << (j+1);
+		txt = ss.str();
+		putText(img, txt, rect_points[j], CV_FONT_HERSHEY_PLAIN, 2, Scalar(255, 0 ,0)); 
+		line( img, rect_points[j], rect_points[(j+1)%4], Scalar(255, 0, 255), 1, 8 );
+
+		putText(img, txt, boundRectPoints[j], CV_FONT_HERSHEY_PLAIN, 2, Scalar(0, 255 ,0)); 
+
+	}
+	*/
+
+
+/***
+Point2f boundRectPoints[4]; 
+
+	boundRectPoints[0] = Point2f((float)(boundRect.x + boundRect.width), (float)(boundRect.y + boundRect.height));
+	boundRectPoints[1] = Point2f((float)boundRect.x, (float)(boundRect.y + boundRect.height));
+	boundRectPoints[2] = Point2f((float)boundRect.x, (float)boundRect.y);
+	boundRectPoints[3] = Point2f((float)(boundRect.x + boundRect.width), (float)boundRect.y);
+
+	//extract each curved side separately
+	vector<vector<Point>> curvedSides(2);
+
+	vector<Point> largestcnt = contours[indMaxArea];
+
+	//bounds for left and right curved sides
+
+	//y - y1 = (y2-y1)*(x-x1)/(x2-x1)
+	//f = y1+m(x-x1)-y
+	
+	double m1, m2;
+	m1 = (sortedCorners[2].y - sortedCorners[1].y)/(sortedCorners[2].x - sortedCorners[1].x);
+	m2 = (sortedCorners[3].y - sortedCorners[0].y)/(sortedCorners[3].x - sortedCorners[0].x);
+
+	cout << "m1: " << m1 << " and m2: " << m2 << endl;
+
+	double f1, f2;
+	f1 = sortedCorners[1].y + m1*(avgCorners.x - sortedCorners[1].x) - avgCorners.y;
+	f2 = sortedCorners[0].y + m2*(avgCorners.x - sortedCorners[0].x) - avgCorners.y;
+
+	cout << "f1: " << f1 << " and f2: " << f2 << endl;
+
+	vector<Point> leftSide, rightSide;
+
+	for(int i = 0; i < largestcnt.size(); i++)
+	{
+		if(checkPoint(largestcnt[i], m1, corners[1], f1))
+			leftSide.push_back(largestcnt[i]);
+
+		else
+			if(checkPoint(largestcnt[i], m2, sortedCorners[0], f2))
+				rightSide.push_back(largestcnt[i]);
+	}
+
+	cout << "size of image: " << img.size() << endl;
+
+	cout << "left side: " << endl;
+	cout << leftSide << endl;
+
+	cout << endl;
+
+	cout << "right side: " << endl;
+	cout << rightSide << endl;
+	cout << endl;
+
+	curvedSides.push_back(leftSide);
+	curvedSides.push_back(rightSide);
+
+	//draw curvedsides
+	for(int j = 0; j < leftSide.size(); j++)			
+		circle(imgCpy, leftSide[j], 3, Scalar(0, 255, 0), -1);
+
+	for(int j = 0; j < rightSide.size(); j++)			
+		circle(imgCpy, rightSide[j], 3, Scalar(255, 0, 0), -1);
+
+	cout << "length of left curved side: " << arcLength(leftSide, false) << endl;
+
+	cout << "verticle height of left curved side: " << abs(sortedCorners[2].y - sortedCorners[1].y) << endl;
+
+	cout << "verticle height of right curved side: " << abs(sortedCorners[3].y - sortedCorners[0].y) << endl;
+
+	cout << "length of right curved side: " << arcLength(rightSide, false) << endl;
+
+	/*for(int i = 0; i < 2; i++)
+		for(int j = 0; j < curvedSides[i].size(); j++)
+			circle(imgCpy, curvedSides[i][j], 3, colorVec[i], -1);
+			*/
+
+
+
 
 
 //****************************\\
