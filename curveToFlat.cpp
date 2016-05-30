@@ -231,6 +231,15 @@ void findCorners2(vector<Point2f> cnt, vector<Point2f> &cornerPts, vector<int> &
 }
 
 
+void showReducedImage(string title, Mat img)
+{
+	Mat temp;
+	resize(img, temp, Size(), 0.5, 0.5, CV_INTER_AREA);
+
+	imshow(title, temp);
+}
+
+
 
 void detectCircle(Mat img)
 {
@@ -240,8 +249,8 @@ void detectCircle(Mat img)
 	Rect imgRect = Rect(0, (int)(0.3*img.rows), img.cols, img.rows);
 
 	img.copyTo(image(imgRect));
-
-	imshow("padded", image);
+	showReducedImage("padded", image);
+	//imshow("padded", image);
 	waitKey(0);
 
 	Mat hsv;
@@ -253,7 +262,8 @@ void detectCircle(Mat img)
 	Mat thresh;
 	inRange(hsv, Scalar(0, 0, 0, 0), Scalar(180, 255, 80, 0), thresh);  //detect black color
 
-	imshow("threshold", thresh);
+	showReducedImage("threshold", thresh);
+	//imshow("threshold", thresh);
 	waitKey(0);
 
 	//find contours
@@ -271,10 +281,10 @@ void detectCircle(Mat img)
 	{
 		double area = contourArea(contours[i]);
 
-		if(area > 0.4*img.rows*img.cols)
+		if(area > 0.7*img.rows*img.cols)
 			continue;
 
-		if(area < 0.3*img.rows*img.cols)
+		if(area < 0.1*img.rows*img.cols)
 			continue;
 
 		drawContours(cntimg, contours, i, Scalar(255, 255, 0));		
@@ -314,21 +324,15 @@ void detectCircle(Mat img)
 
 	Mat transformed = Mat::zeros(image.rows, image.cols + delX, CV_8UC3);
 	warpPerspective(image, transformed, transmtx, Size(image.cols+delX, image.rows));
-	imshow("transformed", transformed);
+	
+	showReducedImage("transformed", transformed);
+	//imshow("transformed", transformed);
 
-	imshow("circle", cntimg);
+	//imshow("circle", cntimg);
+	showReducedImage("circle", cntimg);
 	waitKey(0);
 
 }
-
-void showReducedImage(string title, Mat img)
-{
-	Mat temp;
-	resize(img, temp, Size(), 0.5, 0.5, CV_INTER_AREA);
-
-	imshow(title, temp);
-}
-
 
 
 int main( int argc, char** argv)
@@ -408,6 +412,7 @@ int main( int argc, char** argv)
 		return 0;
 	}
 
+	cout << "found largest contour.. " << endl;
 
 	//largest contour
 	drawContours(cntimg, contours, indMaxArea, Scalar(255));
@@ -424,6 +429,13 @@ int main( int argc, char** argv)
 
 	findCorners2(approxcnt, corners, cornersInd, 2.5);
 
+	if(corners.size() != 4)
+	{
+		cout << "4 corners are not found ... quitting" << endl;
+		return 0;
+	}
+
+	//draw points for largest contour
 	for(int i = 0; i < approxcnt.size(); i++){
 		circle(img, approxcnt[i], 4, Scalar(255, 0, 0), -1);
 		String txt;
@@ -433,15 +445,26 @@ int main( int argc, char** argv)
 		putText(img, txt, approxcnt[i], CV_FONT_HERSHEY_COMPLEX_SMALL, 1, Scalar(0, 255 , 255));
 	}
 
-	cout << "found largest contour.. " << endl;
-
 	//bouding box	
 	Rect boundRect = boundingRect(contours[indMaxArea]);
 
-	Rect bb2 = Rect(boundRect.x-20, boundRect.y-20, boundRect.width+40, boundRect.height+40);
+	Rect bb2 = Rect(boundRect.x-20, boundRect.y-20, boundRect.width+60, boundRect.height+60); //extend bounding box to cover more area like 20 pixels on all sides
+
+	// rotated rectangle
+	RotatedRect rotBoundRect = minAreaRect(contours[indMaxArea]);		
+    Point2f rect_points[4]; rotBoundRect.points( rect_points );
 
 	rectangle(img, boundRect, Scalar(255, 0, 0));
 
+	for( int j = 0; j < 4; j++ )
+	{
+		line( img, rect_points[j], rect_points[(j+1)%4], Scalar(0, 255, 0), 1, 8 );
+		String txt;
+		stringstream ss;
+		ss << (j+1);
+		txt = ss.str();
+		putText(img, txt, rect_points[j], CV_FONT_HERSHEY_COMPLEX_SMALL, 1, Scalar(255, 0 , 255));
+	}
 	showReducedImage("image", img);
 	//imshow("image", img);
 	waitKey(0);
@@ -451,86 +474,12 @@ int main( int argc, char** argv)
 	Mat bbImg;
 	img(bb2).copyTo(bbImg);
 
-	cout << "detect circle and corresponding contour" << endl;
 
-	//detectCircle(bbImg);
-
-	//unwarping each part
-	/*vector<vector<int>> ind(5);
-
-	ind[0].push_back(11); ind[0].push_back(0); ind[0].push_back(10); ind[0].push_back(9);
-	ind[1].push_back(0); ind[1].push_back(1); ind[1].push_back(9); ind[1].push_back(8);
-	ind[2].push_back(1); ind[2].push_back(2); ind[2].push_back(8); ind[2].push_back(7);
-	ind[3].push_back(2); ind[3].push_back(3); ind[3].push_back(7); ind[3].push_back(6);
-	ind[4].push_back(3); ind[4].push_back(4); ind[4].push_back(6); ind[4].push_back(5);
-
-
-	//cout << "ind[0][0]: " << ind[0][0] << endl << endl;
-
-	vector<Point> p(4);
-	p[0] = approxcnt[11];
-	p[1] = approxcnt[0];
-	p[2] = approxcnt[10];
-	p[3] = approxcnt[9];
-	
-	Mat out;
-
-	applyWarping(img2.clone(), out, p); 
-	
-
-	Mat flatImg;
-
-	vector<Mat> outImages;
-
-	int finalHt = 0;
-
-	int maxWidth = 0;
-
-	Rect r;
-
-	for(int i = 0; i < 5; i++)
-	{
-		vector<Point> p(4);
-		
-		//for(int j = 0; j < 5; j++)
-			//p.push_back(approxcnt[ind[i][j]]);
-
-		p[0] = approxcnt[ind[i][0]];
-		p[1] = approxcnt[ind[i][1]];
-		p[2] = approxcnt[ind[i][2]];
-		p[3] = approxcnt[ind[i][3]];
-
-		Mat out;
-
-		applyWarping(img2.clone(), out, p, boundRect.width);
-
-		//cout << "width of output - " << i << " is: " << out.cols << endl;
-		//cout << "height of output - " << i << " is: " << out.rows << endl;
-
-		outImages.push_back(out);
-
-		finalHt += out.rows;
-
-		maxWidth = (maxWidth >= out.cols)?maxWidth:out.cols;
-
-	}
-
-
-	//Mat vcatImg = Mat::zeros(finalHt, maxWidth, CV_8UC3);
-
-	//for(int i = 0; i < outImages.size(); i++)
-
-	vconcat(outImages, flatImg);
-	*/
-	//imshow("flat final", flatImg);
-	//waitKey(0);
-
-
-	if(corners.size() != 4)
-	{
-		cout << "4 corners are not found ... quitting" << endl;
-		return 0;
-	}
+	vector<Scalar> colorVec(4);
+	colorVec[0] = Scalar(0, 255, 0);
+	colorVec[1] = Scalar(50, 255, 112); 
+	colorVec[2] = Scalar(120, 255, 20);
+	colorVec[3] = Scalar(10, 150, 0);
 
 	//sort corner points in clockwise order starting from bottom-right point
 	vector<Point2f> sortedCorners(4);
@@ -554,12 +503,6 @@ int main( int argc, char** argv)
 			sortedCorners[1] = corners[i];			
 	}
 
-	vector<Scalar> colorVec(4);
-	colorVec[0] = Scalar(0, 255, 0);
-	colorVec[1] = Scalar(50, 255, 112); 
-	colorVec[2] = Scalar(120, 255, 20);
-	colorVec[3] = Scalar(10, 150, 0);
-
 	//print indices of corners to show the sort order
 	for(int i = 0; i < sortedCorners.size(); i++)
 	{
@@ -570,16 +513,7 @@ int main( int argc, char** argv)
 		putText(imgCpy, txt, sortedCorners[i], CV_FONT_HERSHEY_PLAIN, 2, Scalar(0, 0 , 255)); 
 	}
 
-	cout << "sorted corners: " << endl;
-	cout << sortedCorners << endl << endl;
-
 	
-	rectangle(img, boundRect, Scalar(255, 255, 0));
-	RotatedRect rotBoundRect = minAreaRect(contours[indMaxArea]);		
-	drawContours(cntimg, contours, indMaxArea, Scalar(255));
-	
-	// rotated rectangle
-    Point2f rect_points[4]; rotBoundRect.points( rect_points );
 	Point2f boundRectPoints[4]; 
 
 	boundRectPoints[0] = Point2f((float)(boundRect.x + boundRect.width), (float)(boundRect.y + boundRect.height));
@@ -613,7 +547,7 @@ int main( int argc, char** argv)
 
 	for(int i = 0; i < largestcnt.size(); i++)
 	{
-		if(checkPoint(largestcnt[i], m1, sortedCorners[1], f1))
+		if(checkPoint(largestcnt[i], m1, corners[1], f1))
 			leftSide.push_back(largestcnt[i]);
 
 		else
@@ -662,7 +596,11 @@ int main( int argc, char** argv)
 
 	//src[0] = rect_points[2]; src[1] = rect_points[3]; src[2] = boundRectPoints[0]; src[3] = boundRectPoints[1]; 
 
-	src[0] = boundRectPoints[2]; src[1] = boundRectPoints[3]; src[2] = rect_points[0]; src[3] = rect_points[1];
+	//src[0] = boundRectPoints[2]; src[1] = boundRectPoints[3]; src[2] = rect_points[0]; src[3] = rect_points[1];
+	src[0] = sortedCorners[2]; src[1] = sortedCorners[3]; src[2] = sortedCorners[0]; src[3] = sortedCorners[1];
+	
+	//dst[0] = Point2f(boundRect.x, boundRect.y); dst[1] = Point2f(boundRect.x + boundRect.width, boundRect.y);
+	//dst[2] = Point2f(boundRect.x + boundRect.width, boundRect.y + boundRect.height);
 
 	int h1 = src[3].y - src[0].y;
 	int h2 = src[2].y - src[1].y;
@@ -675,10 +613,10 @@ int main( int argc, char** argv)
 
 	dst[0] = Point2f(0, 0);
 	dst[1] = Point2f(boundRect.width, 0);
-	dst[2] = Point2f(boundRect.width, h);
-	dst[3] = Point2f(0, h);
-
-	for( int j = 0; j < 4; j++ )
+	dst[2] = Point2f(boundRect.width, boundRect.height);
+	dst[3] = Point2f(0, boundRect.height);
+	
+	/*for( int j = 0; j < 4; j++ )
 	{
 		String txt;
 		stringstream ss;
@@ -690,7 +628,7 @@ int main( int argc, char** argv)
 		putText(img, txt, boundRectPoints[j], CV_FONT_HERSHEY_PLAIN, 2, Scalar(0, 255 ,0)); 
 
 	}
-
+	*/
 	Mat ppt = getPerspectiveTransform(src, dst);
 
 	cout << "applying perspective transform" << endl;
@@ -720,62 +658,6 @@ int main( int argc, char** argv)
 	//Rect wbb = boundingRect(warpcntMaxAreaMaxArea);
 
 	detectCircle(dstImg.clone());
-
-
-
-	//****************************\\
-	
-	/*Mat dst2Img;
-	dstImg.copyTo(dst2Img);
-
-	//bouding box	
-	Rect boundRect2 = boundingRect(warpcntMaxArea);
-
-	Mat flatImg2;
-
-	vector<Mat> outImages2;
-
-	int finalHt2 = 0;
-
-	int maxWidth2 = 0;
-
-	//Rect rect2;
-
-	for(int i = 0; i < 5; i++)
-	{
-		vector<Point> p(4);
-		
-		//for(int j = 0; j < 5; j++)
-			//p.push_back(approxcnt[ind[i][j]]);
-
-		p[0] = warpcntMaxArea[ind[i][0]];
-		p[1] = warpcntMaxArea[ind[i][1]];
-		p[2] = warpcntMaxArea[ind[i][2]];
-		p[3] = warpcntMaxArea[ind[i][3]];
-
-		Mat out;
-
-		applyWarping(dst2Img.clone(), out, p, boundRect2.width);
-
-		cout << "width of output - " << i << " is: " << out.cols << endl;
-		cout << "height of output - " << i << " is: " << out.rows << endl;
-
-		outImages2.push_back(out);
-
-		finalHt2 += out.rows;
-
-		maxWidth2 = (maxWidth2 >= out.cols)?maxWidth2:out.cols;
-
-	}
-
-	vconcat(outImages2, flatImg2);
-
-	imshow("flat final", flatImg2);
-	waitKey(0);
-	*/
-
-
-	//*********************************//
 
 	int minX = 10000;
 	int maxX = 0;
@@ -881,6 +763,140 @@ int main( int argc, char** argv)
 
 	return 1;
 }
+
+
+//****************************\\
+	
+	/*Mat dst2Img;
+	dstImg.copyTo(dst2Img);
+
+	//bouding box	
+	Rect boundRect2 = boundingRect(warpcntMaxArea);
+
+	Mat flatImg2;
+
+	vector<Mat> outImages2;
+
+	int finalHt2 = 0;
+
+	int maxWidth2 = 0;
+
+	//Rect rect2;
+
+	for(int i = 0; i < 5; i++)
+	{
+		vector<Point> p(4);
+		
+		//for(int j = 0; j < 5; j++)
+			//p.push_back(approxcnt[ind[i][j]]);
+
+		p[0] = warpcntMaxArea[ind[i][0]];
+		p[1] = warpcntMaxArea[ind[i][1]];
+		p[2] = warpcntMaxArea[ind[i][2]];
+		p[3] = warpcntMaxArea[ind[i][3]];
+
+		Mat out;
+
+		applyWarping(dst2Img.clone(), out, p, boundRect2.width);
+
+		cout << "width of output - " << i << " is: " << out.cols << endl;
+		cout << "height of output - " << i << " is: " << out.rows << endl;
+
+		outImages2.push_back(out);
+
+		finalHt2 += out.rows;
+
+		maxWidth2 = (maxWidth2 >= out.cols)?maxWidth2:out.cols;
+
+	}
+
+	vconcat(outImages2, flatImg2);
+
+	imshow("flat final", flatImg2);
+	waitKey(0);
+	*/
+
+
+	//*********************************//
+
+
+
+
+//detectCircle(bbImg);
+
+	//unwarping each part
+	/*vector<vector<int>> ind(5);
+
+	ind[0].push_back(11); ind[0].push_back(0); ind[0].push_back(10); ind[0].push_back(9);
+	ind[1].push_back(0); ind[1].push_back(1); ind[1].push_back(9); ind[1].push_back(8);
+	ind[2].push_back(1); ind[2].push_back(2); ind[2].push_back(8); ind[2].push_back(7);
+	ind[3].push_back(2); ind[3].push_back(3); ind[3].push_back(7); ind[3].push_back(6);
+	ind[4].push_back(3); ind[4].push_back(4); ind[4].push_back(6); ind[4].push_back(5);
+
+
+	//cout << "ind[0][0]: " << ind[0][0] << endl << endl;
+
+	vector<Point> p(4);
+	p[0] = approxcnt[11];
+	p[1] = approxcnt[0];
+	p[2] = approxcnt[10];
+	p[3] = approxcnt[9];
+	
+	Mat out;
+
+	applyWarping(img2.clone(), out, p); 
+	
+
+	Mat flatImg;
+
+	vector<Mat> outImages;
+
+	int finalHt = 0;
+
+	int maxWidth = 0;
+
+	Rect r;
+
+	for(int i = 0; i < 5; i++)
+	{
+		vector<Point> p(4);
+		
+		//for(int j = 0; j < 5; j++)
+			//p.push_back(approxcnt[ind[i][j]]);
+
+		p[0] = approxcnt[ind[i][0]];
+		p[1] = approxcnt[ind[i][1]];
+		p[2] = approxcnt[ind[i][2]];
+		p[3] = approxcnt[ind[i][3]];
+
+		Mat out;
+
+		applyWarping(img2.clone(), out, p, boundRect.width);
+
+		//cout << "width of output - " << i << " is: " << out.cols << endl;
+		//cout << "height of output - " << i << " is: " << out.rows << endl;
+
+		outImages.push_back(out);
+
+		finalHt += out.rows;
+
+		maxWidth = (maxWidth >= out.cols)?maxWidth:out.cols;
+
+	}
+
+
+	//Mat vcatImg = Mat::zeros(finalHt, maxWidth, CV_8UC3);
+
+	//for(int i = 0; i < outImages.size(); i++)
+
+	vconcat(outImages, flatImg);
+	*/
+	//imshow("flat final", flatImg);
+	//waitKey(0);
+
+
+
+
 
 /*
 
