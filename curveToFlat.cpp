@@ -61,109 +61,8 @@ static void applyWarping(Mat img, Mat &out, vector<Point> points, int w)  //orde
 
 }
 
-void findCorners(vector<Point2f> contour, vector<int> &corners, vector<Point2f> &ret, int max_corners, int min_angle, int min_distance)
-{
-	double prevAngle = 0; //in degrees
-	double distance = 0;
 
-	ret.reserve(max_corners);
-
-	corners.reserve(max_corners);
-
-	int cc = 0;	
-
-	for(int i = 0; i < contour.size() + 3; i++)
-	{
-		Point2f p1, p2, p3;
-
-		if(i > 2)
-		{			
-			if(i - contour.size() < 0)
-			{
-				p1 = contour[i-2];		
-				p2 = contour[i-1];
-				p3 = contour[i];
-			}
-		
-			else if(i - contour.size() == 0)
-			{
-				p1 = contour[i-2];
-				p2 = contour[i-1];
-				p3 = contour[0];
-			}
-			else if(i - contour.size() == 1)
-			{
-				p1 = contour[i-2];
-				p2 = contour[0];
-				p3 = contour[1];
-			}
-			else if(i - contour.size() == 2)
-			{
-				p1 = contour[i - contour.size() - 2];
-				p2 = contour[i - contour.size() - 1];
-				p3 = contour[i - contour.size()];
-			}
-
-			 //Calculate angle between points 1 and 3
-			 double currAngle = atan2( p1.y - p3.y, p1.x - p3.x ) * 180 / CV_PI;
-			 if( currAngle < 0 )                
-				 currAngle = (currAngle * -1);
-
-			 if( i > 3 )
-			 {
-				 //calculate the difference between this angle and the previous one            
-				 double diffAngle = prevAngle - currAngle;
- 				
-				 if( diffAngle < 0 ) //Make sure sign is positive                
-					 diffAngle = (diffAngle * (-1));
-                 
-				 //Add point to return array if angle diff is above threshold
-				 if( diffAngle > min_angle )                
-				 {                    
-					 //Ignore points that are closer than "min_distance pixels" to the previous point                    
-					 if( cc > 0 )                    
-					 {                        
-						 double dx = p1.x - ret[cc - 1].x;                 
-						 double dy = p1.y - ret[cc - 1].y;
-
-						 distance = sqrtf( (dx * dx) + (dy * dy) );
-                         
-						 if( distance >= min_distance )                        
-						 {                            
-							 ret[cc] = p1;							
-							 corners[cc] = i-2;                            
-							 cc++;      
-							 cout << "corner found: " << i-2 << endl;
-
-						 }
-					 }
-					 
-					 else                    					 
-					 {                        						 
-						 ret[cc] = p1;
-						 corners[cc] = i-2;
-						 cc++;
-						 cout << "corner found: " << i-2 << endl;
-					 }
-                     					 
-					 if( cc > max_corners-1 )                        						 					 
-						 break;                
-				 }
-            
-			 }
-             
-			 prevAngle = currAngle;		
-		}
-	}	//end of for loop
-
-	if( cc < max_corners )
-		cout << "corners found : " << cc << " of " << max_corners << " corners" << endl;
-
-} //end of findCorners
-
-
-
-void findCorners2(vector<Point2f> cnt, vector<Point2f> &cornerPts, vector<int> &cornerInd, double threshAngle)
+void findCorners(vector<Point2f> cnt, vector<Point2f> &cornerPts, vector<int> &cornerInd, double threshAngle)
 {
 	Point2f p1, p2, p3;
 
@@ -256,15 +155,12 @@ bool detectCircle(Mat img)
 	Mat hsv;
 	cvtColor(image.clone(), hsv, CV_BGR2HSV);
 
-	//Mat thresh;
-	//threshold(gray.clone(), thresh, 30, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
-
 	Mat thresh;
 	inRange(hsv, Scalar(0, 0, 0, 0), Scalar(180, 255, 80, 0), thresh);  //detect black color
 
-	showReducedImage("threshold", thresh);
+	//showReducedImage("threshold", thresh);
 	//imshow("threshold", thresh);
-	waitKey(0);
+	//waitKey(0);
 
 	//find contours
 	vector<vector<Point> > contours;
@@ -325,11 +221,11 @@ bool detectCircle(Mat img)
 
 	Mat transmtx = getPerspectiveTransform(src_pts,dst_pts);
 
-	int delX = 2*radius - R.width;
-	int delY = 2*radius - R.height;
+	//int delX = 2*radius - R.width;
+	//int delY = 2*radius - R.height;
 
-	Mat transformed = Mat::zeros(image.rows, image.cols + delX, CV_8UC3);
-	warpPerspective(image, transformed, transmtx, Size(image.cols+delX, image.rows));
+	Mat transformed = Mat::zeros(image.rows, image.cols, CV_8UC3);
+	warpPerspective(image, transformed, transmtx, Size(image.cols, image.rows));
 	
 	showReducedImage("transformed", transformed);
 	//imshow("transformed", transformed);
@@ -337,6 +233,10 @@ bool detectCircle(Mat img)
 	//imshow("circle", cntimg);
 	showReducedImage("circle", cntimg);
 	waitKey(0);
+
+	//transform points
+	//perspectiveTransform(paddedCorners, transformedCorners, transmtx);
+
 
 	return true;
 
@@ -428,18 +328,6 @@ int main( int argc, char** argv)
 	vector<Point2f> approxcnt;
 	approxPolyDP(Mat(contours[indMaxArea]), approxcnt, 2, true);
 
-	//find corners
-	vector<Point2f> corners;
-	vector<int> cornersInd;
-
-	findCorners2(approxcnt, corners, cornersInd, 2.5);
-
-	if(corners.size() != 4)
-	{
-		cout << "4 corners are not found ... quitting" << endl;
-		return 0;
-	}
-
 	//draw points for largest contour
 	for(int i = 0; i < approxcnt.size(); i++){
 		circle(img, approxcnt[i], 4, Scalar(255, 0, 0), -1);
@@ -450,51 +338,19 @@ int main( int argc, char** argv)
 		putText(img, txt, approxcnt[i], CV_FONT_HERSHEY_COMPLEX_SMALL, 1, Scalar(0, 255 , 255));
 	}
 
-	//bounding box	
-	Rect boundRect = boundingRect(contours[indMaxArea]);
 
-	//******************\\
+	//find corners
+	vector<Point2f> corners;
+	vector<int> cornersInd;
 
-	//apply circle detection and prespective correction
-	Mat img2;
-	img(boundRect).copyTo(img2);
-	detectCircle(img2);
+	findCorners(approxcnt, corners, cornersInd, 2.5);
 
-
-	//*******************\\
-
-
-
-	Rect bb2 = Rect(boundRect.x-20, boundRect.y-20, boundRect.width+60, boundRect.height+60); //extend bounding box to cover more area like 20 pixels on all sides
-
-	// rotated rectangle
-	RotatedRect rotBoundRect = minAreaRect(contours[indMaxArea]);		
-    Point2f rect_points[4]; rotBoundRect.points( rect_points );   //clock-wise order starting with bottom left corner
-
-	//draw bounding box and rotated rectangle
-	rectangle(img, boundRect, Scalar(255, 0, 0));
-
-	for( int j = 0; j < 4; j++ )
+	if(corners.size() != 4)
 	{
-		line( img, rect_points[j], rect_points[(j+1)%4], Scalar(0, 255, 0), 1, 8 );
-		String txt;
-		stringstream ss;
-		ss << (j+1);
-		txt = ss.str();
-		putText(img, txt, rect_points[j], CV_FONT_HERSHEY_COMPLEX_SMALL, 1, Scalar(255, 0 , 255));
+		cout << "4 corners are not found ... quitting" << endl;
+		return 0;
 	}
 
-
-	showReducedImage("image", img);
-	//imshow("image", img);
-	waitKey(0);
-
-
-	//apply perspective correction to circle inside bounding box
-	Mat bbImg;
-	img(bb2).copyTo(bbImg);
-
-	
 	//sort corner points in clockwise order starting from bottom-right point
 	vector<Point2f> sortedCorners(4);
 	vector<int> sortedCornersInd(4);
@@ -527,25 +383,40 @@ int main( int argc, char** argv)
 		putText(imgCpy, txt, sortedCorners[i], CV_FONT_HERSHEY_PLAIN, 2, Scalar(0, 0 , 255)); 
 	}
 
+
+	//bounding box	
+	Rect boundRect = boundingRect(contours[indMaxArea]);
+
+	// rotated rectangle
+	RotatedRect rotBoundRect = minAreaRect(contours[indMaxArea]);		
+    Point2f rect_points[4]; rotBoundRect.points( rect_points );   //clock-wise order starting with bottom left corner
 	
+	//draw bounding box and rotated rectangle
+	rectangle(img, boundRect, Scalar(255, 0, 0));
+
+	for( int j = 0; j < 4; j++ )
+	{
+		line( img, rect_points[j], rect_points[(j+1)%4], Scalar(0, 255, 0), 1, 8 );
+		String txt;
+		stringstream ss;
+		ss << (j+1);
+		txt = ss.str();
+		putText(img, txt, rect_points[j], CV_FONT_HERSHEY_COMPLEX_SMALL, 1, Scalar(255, 0 , 255));
+	}
+
+
+	showReducedImage("image", img);
+	//imshow("image", img);
+	waitKey(0);
+
 	vector<Point2f> src(4), dst(4);
-
-	//src[0] = boundRectPoints[2]; src[1] = boundRectPoints[3]; src[2] = boundRectPoints[0]; src[3] = boundRectPoints[1]; 
 	
-	//src[0] = rect_points[2]; src[1] = rect_points[3]; src[2] = rect_points[0]; src[3] = rect_points[1];
+	src[0] = rect_points[1]; src[1] = rect_points[2]; src[2] = rect_points[3]; src[3] = rect_points[0];
 
-	//src[0] = rect_points[2]; src[1] = rect_points[3]; src[2] = boundRectPoints[0]; src[3] = boundRectPoints[1]; 
-
-	//src[0] = boundRectPoints[2]; src[1] = boundRectPoints[3]; src[2] = rect_points[0]; src[3] = rect_points[1];
-	src[0] = sortedCorners[2]; src[1] = sortedCorners[3]; src[2] = sortedCorners[0]; src[3] = sortedCorners[1];
-	
-	//dst[0] = Point2f(boundRect.x, boundRect.y); dst[1] = Point2f(boundRect.x + boundRect.width, boundRect.y);
-	//dst[2] = Point2f(boundRect.x + boundRect.width, boundRect.y + boundRect.height);
-
-	dst[0] = Point2f(0, 0);
-	dst[1] = Point2f(boundRect.width, 0);
-	dst[2] = Point2f(boundRect.width, boundRect.height);
-	dst[3] = Point2f(0, boundRect.height);
+	dst[0] = Point2f(0, 0);  //2
+	dst[1] = Point2f(boundRect.width, 0); //3
+	dst[2] = Point2f(boundRect.width, boundRect.height);  //0
+	dst[3] = Point2f(0, boundRect.height); //1
 		
 	Mat ppt = getPerspectiveTransform(src, dst);
 
@@ -565,24 +436,38 @@ int main( int argc, char** argv)
 
 	vector<Point2f> cntMaxArea;
 	
-	//biggest contour after transformation
-	for(int i = 0; i < contours[indMaxArea].size(); i++)
-		cntMaxArea.push_back(Point2f(contours[indMaxArea][i].x, contours[indMaxArea][i].y));
+	src[0] = warpCorners[2]; src[1] = warpCorners[3]; src[2] = warpCorners[0]; src[3] = warpCorners[1];
 
-	perspectiveTransform(cntMaxArea, warpcntMaxArea, ppt);
+	Mat ppt2 = getPerspectiveTransform(src, dst);
 
+	Mat dstImg2;
+	warpPerspective(dstImg, dstImg2, ppt2, Size(boundRect.width, boundRect.height));
+
+	showReducedImage("transformed2", dstImg2);
+	//imshow("transformed2", dstImg2);
+	waitKey(0);
 
 	//bounding box for warped contours
 
 	//Rect wbb = boundingRect(warpcntMaxAreaMaxArea);
 
-	if(!detectCircle(dstImg.clone()))
+	if(!detectCircle(dstImg2.clone()))
 		return -1;
 
 	return 1;
 }
 
 
+
+/***
+
+
+//biggest contour after transformation
+	for(int i = 0; i < contours[indMaxArea].size(); i++)
+		cntMaxArea.push_back(Point2f(contours[indMaxArea][i].x, contours[indMaxArea][i].y));
+
+	perspectiveTransform(cntMaxArea, warpcntMaxArea, ppt);
+*/
 
 
 
